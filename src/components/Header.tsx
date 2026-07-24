@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { checkRpcHealth, RpcNodeHealth } from "@/lib/rpc";
-import { RefreshCw, Server, Cpu, ShieldAlert } from "lucide-react";
+import { useAdminAuth } from "@/context/AuthContext";
+import { RefreshCw, Server, Cpu, ShieldAlert, LogOut } from "lucide-react";
 
 export function Header() {
+  const { user, logout } = useAdminAuth();
   const [health, setHealth] = useState<RpcNodeHealth | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -81,15 +83,24 @@ export function Header() {
         </button>
 
         {/* Profile Pill */}
-        <div className="flex items-center gap-3 pl-2 border-l border-slate-800">
-          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-white text-sm shadow-md">
-            SA
+        {user && (
+          <div className="flex items-center gap-3 pl-2 border-l border-slate-800">
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-white text-sm shadow-md">
+              {user.name ? user.name.charAt(0).toUpperCase() : "A"}
+            </div>
+            <div className="hidden md:flex flex-col">
+              <span className="text-xs font-semibold text-slate-200">{user.name}</span>
+              <span className="text-[10px] text-slate-400">{user.email}</span>
+            </div>
+            <button
+              onClick={logout}
+              className="p-2 rounded-xl text-slate-400 hover:text-red-400 hover:bg-slate-800/60 transition-all ml-1"
+              title="Sign Out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
-          <div className="hidden md:flex flex-col">
-            <span className="text-xs font-semibold text-slate-200">Super Admin</span>
-            <span className="text-[10px] text-slate-400">admin@certchain.edu</span>
-          </div>
-        </div>
+        )}
       </div>
     </header>
   );
