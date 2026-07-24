@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "@/components/Sidebar";
-import { Header } from "@/components/Header";
+import { AdminLayoutWrapper } from "@/components/AdminLayoutWrapper";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,14 +25,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}>
-      <body className="bg-slate-950 text-slate-100 flex min-h-screen">
-        <Sidebar />
-        <div className="flex-1 flex flex-col min-w-0">
-          <Header />
-          <main className="flex-1 p-8 overflow-y-auto bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950">
-            {children}
-          </main>
-        </div>
+      <body className="bg-slate-950 text-slate-100 min-h-screen">
+        <AdminLayoutWrapper>{children}</AdminLayoutWrapper>
       </body>
     </html>
   );

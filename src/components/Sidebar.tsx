@@ -19,6 +19,12 @@ const NAV_ITEMS = [
     description: "System stats & network overview",
   },
   {
+    name: "System & Node Monitor",
+    href: "/system",
+    icon: Activity,
+    description: "EVM RPC, IPFS Pinata & Signer health",
+  },
+  {
     name: "Blockchain Explorer",
     href: "/blocks",
     icon: Blocks,

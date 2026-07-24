@@ -3,7 +3,71 @@ import { CERTIFICATE_REGISTRY_ABI } from "./contractAbi";
 
 export const DEFAULT_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
 export const DEFAULT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-export const DEFAULT_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000/api";
+export const DEFAULT_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
+
+export interface MonitorOverview {
+  blockchain: {
+    connected: boolean;
+    network: string | null;
+    chainId: number | null;
+    blockNumber: number | null;
+    contractAddress: string | null;
+    walletAddress: string | null;
+    walletBalance: string | null;
+  };
+  ipfs: { connected: boolean; gateway: string; error: string | null };
+  totals: { transactions: number; cids: number; failedTransactions: number };
+  transactions: Array<{
+    timestamp: string | null;
+    certificateId: string;
+    certificateCode: string | null;
+    action: "ISSUE" | "REVOKE";
+    transactionHash: string | null;
+    blockNumber: number | null;
+    gasUsed: string | null;
+    status: "SUCCESS" | "FAILED";
+  }>;
+  cids: Array<{
+    certificateId: string;
+    certificateCode: string | null;
+    cid: string;
+    createdAt: string;
+  }>;
+}
+
+function getAuthHeaders(): HeadersInit {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("admin_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export async function fetchSystemMonitor(): Promise<MonitorOverview | null> {
+  try {
+    const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/api$/, "");
+    const res = await fetch(`${baseUrl}/system/monitor`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error("Failed to fetch system monitor data:", err);
+    return null;
+  }
+}
+
+export async function retryRevocation(certificateId: string): Promise<boolean> {
+  try {
+    const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/api$/, "");
+    const res = await fetch(`${baseUrl}/certificates/${certificateId}/retry-revoke`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error("Failed to retry revocation:", err);
+    return false;
+  }
+}
 
 export interface RpcNodeHealth {
   connected: boolean;
