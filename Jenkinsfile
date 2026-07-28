@@ -57,15 +57,21 @@ pipeline {
 
         stage('Build & Push Image to Registry') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-credentials',
-                    usernameVariable: 'REG_USER',
-                    passwordVariable: 'REG_PASS'
-                )]) {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'REG_USER',
+                        passwordVariable: 'REG_PASS'
+                    ),
+                    string(credentialsId: 'admin-sepolia-rpc-url', variable: 'RPC_URL'),
+                    string(credentialsId: 'admin-sepolia-contract-address', variable: 'CONTRACT_ADDR')
+                ]) {
                     sh '''
                     echo "$REG_PASS" | docker login "$REGISTRY" -u "$REG_USER" --password-stdin
                     docker build \
                         --build-arg NEXT_PUBLIC_API_BASE_URL="$NEXT_PUBLIC_API_BASE_URL" \
+                        --build-arg NEXT_PUBLIC_RPC_URL="$RPC_URL" \
+                        --build-arg NEXT_PUBLIC_CONTRACT_ADDRESS="$CONTRACT_ADDR" \
                         -t "$IMAGE_NAME:$TAG" .
                     docker push "$IMAGE_NAME:$TAG"
                     '''
@@ -99,4 +105,4 @@ pipeline {
             deleteDir()
         }
     }
-}
+}   
