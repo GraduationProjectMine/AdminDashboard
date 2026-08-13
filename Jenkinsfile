@@ -6,7 +6,7 @@ pipeline {
         IMAGE_NAME = "nguyentt07/certificate-app-admin"
         TAG        = "dev-${env.BUILD_NUMBER}"
         // Cùng backend với frontend chính, chỉ khác tên biến do code admin dùng NEXT_PUBLIC_API_BASE_URL
-        NEXT_PUBLIC_API_BASE_URL = "http://100.77.202.105:30300"
+        NEXT_PUBLIC_API_BASE_URL = "https://api.100-77-202-105.sslip.io"
     }
 
     options {
