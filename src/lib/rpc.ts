@@ -1,9 +1,21 @@
 import { ethers } from "ethers";
 import { CERTIFICATE_REGISTRY_ABI } from "./contractAbi";
 
-export const DEFAULT_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545";
-export const DEFAULT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-export const DEFAULT_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
+export const DEFAULT_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL!;
+export const DEFAULT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!;
+export const DEFAULT_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL!;
+
+export interface IssuingSchool {
+  organization_id: string;
+  organization_name: string;
+  contact_email: string;
+  wallet_address: string | null;
+  is_verified: boolean;
+  isActive?: boolean;
+  is_onchain_authorized?: boolean;
+  logo_url?: string | null;
+  created_at: string;
+}
 
 export interface MonitorOverview {
   blockchain: {
@@ -21,6 +33,10 @@ export interface MonitorOverview {
     timestamp: string | null;
     certificateId: string;
     certificateCode: string | null;
+    certificateTitle?: string | null;
+    studentName?: string | null;
+    organizationName?: string | null;
+    creatorAddress?: string | null;
     action: "ISSUE" | "REVOKE";
     transactionHash: string | null;
     blockNumber: number | null;
@@ -35,18 +51,149 @@ export interface MonitorOverview {
   }>;
 }
 
-function getAuthHeaders(): HeadersInit {
-  if (typeof window === "undefined") return {};
-  const token = localStorage.getItem("admin_token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
+export interface ContractActivityItem {
+  transactionHash: string;
+  blockNumber: number;
+  timestamp: number;
+  creator: string;
+  creatorName?: string;
+  actionType: "REGISTER_CERT" | "REVOKE_CERT" | "AUTHORIZE_ISSUER" | "DEAUTHORIZE_ISSUER" | "QUERY_CERT" | "UNKNOWN";
+  actionLabel: string;
+  gasUsed?: string;
+  args: Record<string, any>;
+  status: "SUCCESS" | "FAILED";
 }
 
-export async function fetchSystemMonitor(): Promise<MonitorOverview | null> {
+function getAuthHeaders(): HeadersInit {
+  if (typeof window === "undefined") return { "Content-Type": "application/json" };
+  const token = localStorage.getItem("admin_token");
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+function getApiBaseUrl(): string {
+  return (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/api$/, "");
+}
+
+function checkResponseAuth(res: Response) {
+  if (res.status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new Event("admin_token_expired"));
+  }
+}
+
+// ----------------------------------------------------
+// Real Backend API: Issuers & Schools
+// ----------------------------------------------------
+export async function fetchIssuers(): Promise<IssuingSchool[]> {
   try {
-    const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/api$/, "");
-    const res = await fetch(`${baseUrl}/system/monitor`, {
+    const baseUrl = getApiBaseUrl();
+    const res = await fetch(`${baseUrl}/system/issuers`, {
+      headers: getAuthHeaders(),
+      cache: "no-store",
+    });
+    checkResponseAuth(res);
+    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.error("Failed to fetch issuers from API:", err);
+    return [];
+  }
+}
+
+export async function createIssuerApi(dto: {
+  organization_name: string;
+  contact_email: string;
+  wallet_address?: string;
+  is_verified?: boolean;
+}): Promise<IssuingSchool | null> {
+  try {
+    const baseUrl = getApiBaseUrl();
+    const res = await fetch(`${baseUrl}/system/issuers`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(dto),
+    });
+    checkResponseAuth(res);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || `HTTP error ${res.status}`);
+    }
+    return await res.json();
+  } catch (err: any) {
+    console.error("Failed to create issuer:", err);
+    throw err;
+  }
+}
+
+export async function updateIssuerVerificationApi(
+  organizationId: string,
+  isVerified: boolean
+): Promise<{ success: boolean; data?: IssuingSchool }> {
+  try {
+    const baseUrl = getApiBaseUrl();
+    const res = await fetch(`${baseUrl}/system/issuers/${organizationId}/verify`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ is_verified: isVerified }),
+    });
+    checkResponseAuth(res);
+    if (!res.ok) return { success: false };
+    const data = await res.json();
+    return { success: true, data };
+  } catch (err) {
+    console.error("Failed to update issuer verification:", err);
+    return { success: false };
+  }
+}
+
+export async function updateIssuerStatusApi(
+  organizationId: string,
+  isActive: boolean
+): Promise<boolean> {
+  try {
+    const baseUrl = getApiBaseUrl();
+    const res = await fetch(`${baseUrl}/system/issuers/${organizationId}/status`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ isActive }),
+    });
+    checkResponseAuth(res);
+    return res.ok;
+  } catch (err) {
+    console.error("Failed to update issuer status:", err);
+    return false;
+  }
+}
+
+export async function deleteIssuerApi(organizationId: string): Promise<boolean> {
+  try {
+    const baseUrl = getApiBaseUrl();
+    const res = await fetch(`${baseUrl}/system/issuers/${organizationId}`, {
+      method: "DELETE",
       headers: getAuthHeaders(),
     });
+    checkResponseAuth(res);
+    return res.ok;
+  } catch (err) {
+    console.error("Failed to delete issuer:", err);
+    return false;
+  }
+}
+
+// ----------------------------------------------------
+// Real Backend API: System Monitor & Transactions
+// ----------------------------------------------------
+export async function fetchSystemMonitor(): Promise<MonitorOverview | null> {
+  try {
+    const baseUrl = getApiBaseUrl();
+    const res = await fetch(`${baseUrl}/system/monitor`, {
+      headers: getAuthHeaders(),
+      cache: "no-store",
+    });
+    checkResponseAuth(res);
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     return await res.json();
   } catch (err) {
@@ -57,11 +204,12 @@ export async function fetchSystemMonitor(): Promise<MonitorOverview | null> {
 
 export async function retryRevocation(certificateId: string): Promise<boolean> {
   try {
-    const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/api$/, "");
+    const baseUrl = getApiBaseUrl();
     const res = await fetch(`${baseUrl}/certificates/${certificateId}/retry-revoke`, {
       method: "POST",
       headers: getAuthHeaders(),
     });
+    checkResponseAuth(res);
     return res.ok;
   } catch (err) {
     console.error("Failed to retry revocation:", err);
@@ -69,6 +217,9 @@ export async function retryRevocation(certificateId: string): Promise<boolean> {
   }
 }
 
+// ----------------------------------------------------
+// EVM Node & JSON-RPC Calls
+// ----------------------------------------------------
 export interface RpcNodeHealth {
   connected: boolean;
   rpcUrl: string;
@@ -96,14 +247,6 @@ export interface ContractState {
   connected: boolean;
   codeLength: number;
   error?: string;
-}
-
-export interface ContractEventItem {
-  eventName: string;
-  blockNumber: number;
-  transactionHash: string;
-  args: Record<string, any>;
-  timestamp?: number;
 }
 
 export function getProvider(rpcUrl: string = DEFAULT_RPC_URL): ethers.JsonRpcProvider {
@@ -238,15 +381,17 @@ export async function checkIssuerAuthStatus(
   }
 }
 
-export async function getContractEvents(
+// ----------------------------------------------------
+// Real On-Chain Contract Activity & Transactions
+// ----------------------------------------------------
+export async function getContractActivities(
   contractAddress: string = DEFAULT_CONTRACT_ADDRESS,
   rpcUrl: string = DEFAULT_RPC_URL
-): Promise<ContractEventItem[]> {
+): Promise<ContractActivityItem[]> {
   try {
     const provider = getProvider(rpcUrl);
     const contract = new ethers.Contract(contractAddress, CERTIFICATE_REGISTRY_ABI, provider);
-    
-    // Fetch logs from block 0
+
     const filter = {
       address: contractAddress,
       fromBlock: 0,
@@ -254,34 +399,66 @@ export async function getContractEvents(
     };
 
     const logs = await provider.getLogs(filter);
-    const parsedEvents: ContractEventItem[] = [];
+    const activities: ContractActivityItem[] = [];
 
     for (const log of logs) {
       try {
         const parsed = contract.interface.parseLog(log);
-        if (parsed) {
-          const argsObj: Record<string, any> = {};
-          parsed.fragment.inputs.forEach((input, index) => {
-            let val = parsed.args[index];
-            if (typeof val === "bigint") val = val.toString();
-            argsObj[input.name] = val;
-          });
+        if (!parsed) continue;
 
-          parsedEvents.push({
-            eventName: parsed.name,
-            blockNumber: log.blockNumber,
-            transactionHash: log.transactionHash,
-            args: argsObj,
-          });
+        const argsObj: Record<string, any> = {};
+        parsed.fragment.inputs.forEach((input, index) => {
+          let val = parsed.args[index];
+          if (typeof val === "bigint") val = val.toString();
+          argsObj[input.name] = val;
+        });
+
+        // Determine action type and creator
+        let actionType: ContractActivityItem["actionType"] = "UNKNOWN";
+        let actionLabel = parsed.name;
+        let creator = log.address;
+
+        if (parsed.name === "CertificateRegistered") {
+          actionType = "REGISTER_CERT";
+          actionLabel = "Issue Certificate (registerCertificate)";
+          creator = argsObj.issuer || log.address;
+        } else if (parsed.name === "CertificateRevoked") {
+          actionType = "REVOKE_CERT";
+          actionLabel = "Revoke Certificate (revokeCertificate)";
+          creator = argsObj.revoker || log.address;
+        } else if (parsed.name === "IssuerAuthorized") {
+          actionType = "AUTHORIZE_ISSUER";
+          actionLabel = "Authorize Issuer (authorizeIssuer)";
+          creator = argsObj.issuer || log.address;
+        } else if (parsed.name === "IssuerDeauthorized") {
+          actionType = "DEAUTHORIZE_ISSUER";
+          actionLabel = "Deauthorize Issuer (deauthorizeIssuer)";
+          creator = argsObj.issuer || log.address;
         }
+
+        const block = await provider.getBlock(log.blockNumber).catch(() => null);
+
+        activities.push({
+          transactionHash: log.transactionHash,
+          blockNumber: log.blockNumber,
+          timestamp: block ? block.timestamp : Math.floor(Date.now() / 1000),
+          creator,
+          actionType,
+          actionLabel,
+          args: argsObj,
+          status: "SUCCESS",
+        });
       } catch {
         // Skip unparseable log
       }
     }
 
-    return parsedEvents.reverse();
+    return activities.reverse();
   } catch (err) {
-    console.error("Error fetching contract events:", err);
+    console.error("Error fetching contract activities:", err);
     return [];
   }
 }
+
+export const getContractEvents = getContractActivities;
+export type ContractEventItem = ContractActivityItem;

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AuthProvider, useAdminAuth } from "@/context/AuthContext";
+import { I18nProvider } from "@/context/I18nContext";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { RefreshCw } from "lucide-react";
@@ -11,6 +12,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAdminAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const isLoginPage = pathname === "/login";
 
@@ -27,7 +29,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-3 text-slate-400">
-        <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
+        <RefreshCw className="w-8 h-8 animate-spin text-teal-400" />
         <span className="text-sm font-medium">Checking authorization...</span>
       </div>
     );
@@ -39,10 +41,10 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
       <div className="flex-1 flex flex-col min-w-0">
-        <Header />
-        <main className="flex-1 p-8 overflow-y-auto bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950">
+        <Header onMenuClick={() => setMobileOpen(true)} />
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950">
           {children}
         </main>
       </div>
@@ -52,8 +54,11 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
 export function AdminLayoutWrapper({ children }: { children: React.ReactNode }) {
   return (
-    <AuthProvider>
-      <LayoutContent>{children}</LayoutContent>
-    </AuthProvider>
+    <I18nProvider>
+      <AuthProvider>
+        <LayoutContent>{children}</LayoutContent>
+      </AuthProvider>
+    </I18nProvider>
   );
 }
+
